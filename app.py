@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import re, string, contractions
+import re, string, contractions, os, requests, pickle
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
-import pickle
 
 # Ensure NLTK resources are available
 for resource in ["stopwords", "wordnet"]:
@@ -16,17 +15,29 @@ for resource in ["stopwords", "wordnet"]:
     except LookupError:
         nltk.download(resource)
 
-# Load tokenizer and model
+# Download model from Google Drive if missing
+def download_if_missing(url, local_path):
+    if not os.path.exists(local_path):
+        r = requests.get(url)
+        with open(local_path, 'wb') as f:
+            f.write(r.content)
+
 @st.cache_resource
 def load_assets():
-    with open("tokenizer.pkl", "rb") as f:
+    model_url = "https://drive.google.com/uc?id=1Z2UtnBkNHA_tgsh6YN3Zs8Gmux6tBLhC"
+    model_path = "lstm_model.h5"
+    tokenizer_path = "tokenizer.pkl"
+
+    download_if_missing(model_url, model_path)
+
+    with open(tokenizer_path, "rb") as f:
         tokenizer = pickle.load(f)
-    model = load_model("toxicity_model.h5")
+    model = load_model(model_path)
     return tokenizer, model
 
 tokenizer, model = load_assets()
 
-# Preprocessing function
+# Preprocessing
 def preprocess_text(text):
     if not isinstance(text, str):
         return ""
@@ -42,7 +53,7 @@ def preprocess_text(text):
     lemmatized = [lemmatizer.lemmatize(word) for word in words]
     return ' '.join(lemmatized)
 
-# Prediction function
+# Prediction
 def predict_comment(text, model, tokenizer):
     cleaned = preprocess_text(text)
     seq = tokenizer.texts_to_sequences([cleaned])
@@ -50,7 +61,7 @@ def predict_comment(text, model, tokenizer):
     pred = model.predict(padded)[0][0]
     return "Toxic" if pred > 0.5 else "Non-toxic", float(pred)
 
-# UI Layout
+# UI
 st.set_page_config(page_title="Toxicity Detector", layout="centered")
 st.title("🧪 Comment Toxicity Classifier")
 st.markdown("Enter a comment or upload a CSV to detect toxicity.")

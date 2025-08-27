@@ -2,3 +2,6 @@ streamlit
 tensorflow
 numpy
 gdown
+nltk
+contractions
+

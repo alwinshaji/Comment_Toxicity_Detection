@@ -17,6 +17,9 @@ for resource in ["stopwords", "wordnet"]:
     except LookupError:
         nltk.download(resource)
 
+stop_words = set(stopwords.words('english'))
+lemmatizer = WordNetLemmatizer()
+
 # === Focal Loss ===
 def focal_loss(gamma=2., alpha=.25):
     def loss(y_true, y_pred):
@@ -28,16 +31,17 @@ def focal_loss(gamma=2., alpha=.25):
 # === Preprocessing ===
 def preprocess_text(text):
     if not isinstance(text, str): return ""
-    stop_words = set(stopwords.words('english'))
-    lemmatizer = WordNetLemmatizer()
-    text = contractions.fix(text)
-    text = text.lower()
-    text = text.translate(str.maketrans('', '', string.punctuation))
-    text = re.sub(r"http\S+|www\S+|https\S+", '', text)
-    text = re.sub(r"\w*\d\w*", '', text)
-    words = [word for word in text.split() if word not in stop_words]
-    lemmatized = [lemmatizer.lemmatize(word) for word in words]
-    return ' '.join(lemmatized)
+    try:
+        text = contractions.fix(text)
+        text = text.lower()
+        text = text.translate(str.maketrans('', '', string.punctuation))
+        text = re.sub(r"http\S+|www\S+|https\S+", '', text)
+        text = re.sub(r"\w*\d\w*", '', text)
+        words = [word for word in text.split() if word not in stop_words]
+        lemmatized = [lemmatizer.lemmatize(word) for word in words]
+        return ' '.join(lemmatized)
+    except Exception:
+        return ""
 
 # === Load Assets ===
 @st.cache_resource
@@ -81,12 +85,9 @@ def predict_comment(text, model, tokenizer, toxic_threshold=0.6, default_thresho
 st.set_page_config(page_title="Toxicity Detector", layout="centered")
 st.title("🧪 Multi-label Toxicity Classifier")
 
-# === About the Model ===
 with st.expander("📘 About the Model"):
     st.markdown("""
-    This classifier was built using deep learning techniques including **CNNs**, **Bidirectional GRUs**, and **LSTMs**.
-    After extensive experimentation, the final model uses an optimized LSTM architecture trained on the Jigsaw dataset.
-
+    This classifier uses an optimized LSTM architecture trained on the Jigsaw dataset.
     It predicts six toxicity categories:
     - **Toxic**
     - **Severe Toxic**
@@ -94,16 +95,13 @@ with st.expander("📘 About the Model"):
     - **Threat**
     - **Insult**
     - **Identity Hate**
-
-    The model is designed to handle short, informal comments — like those found on social media or forums.
     """)
 
-# === Input Guidance ===
-st.markdown("💡 *Tip: For best results, enter short, informal comments (e.g., social media replies, forum posts). Avoid long paragraphs or technical content.*")
+st.markdown("💡 *Tip: For best results, enter short, informal comments (e.g., social media replies, forum posts).*")
 
 # === Threshold Sliders ===
-threshold = st.slider("⚙️ General threshold for all labels", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
-toxic_threshold = st.slider("🧪 Adjust 'toxic' sensitivity", min_value=0.0, max_value=1.0, value=0.6, step=0.05)
+threshold = st.slider("⚙️ General threshold for all labels", 0.0, 1.0, 0.5, 0.05)
+toxic_threshold = st.slider("🧪 Adjust 'toxic' sensitivity", 0.0, 1.0, 0.6, 0.05)
 
 # === Single Comment ===
 user_input = st.text_area("🔍 Enter a comment", placeholder="Type something like 'You're such a loser!' or 'I love this!'")
@@ -135,18 +133,30 @@ uploaded_file = st.file_uploader("Upload CSV with a 'comment_text' column", type
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
+
         if "comment_text" not in df.columns:
             st.error("CSV must contain a 'comment_text' column.")
         else:
+            df["comment_text"] = df["comment_text"].astype(str).fillna("")
             df["cleaned"] = df["comment_text"].apply(preprocess_text)
-            seqs = tokenizer.texts_to_sequences(df["cleaned"])
-            padded = pad_sequences(seqs, maxlen=200)
-            preds = model.predict(padded)
-            labels = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
-            for i, label in enumerate(labels):
-                t = toxic_threshold if label == "toxic" else threshold
-                df[label + "_score"] = preds[:, i]
-                df[label] = (preds[:, i] >= t).astype(int)
-            st.dataframe(df[["comment_text"] + [label + "_score" for label in labels] + labels])
+
+            valid_df = df[df["cleaned"].str.strip() != ""].copy()
+            skipped_count = len(df) - len(valid_df)
+
+            if valid_df.empty:
+                st.warning("No valid comments found after preprocessing.")
+            else:
+                seqs = tokenizer.texts_to_sequences(valid_df["cleaned"])
+                padded = pad_sequences(seqs, maxlen=200)
+                preds = model.predict(padded)
+
+                labels = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
+                for i, label in enumerate(labels):
+                    t = toxic_threshold if label == "toxic" else threshold
+                    valid_df[label + "_score"] = preds[:, i]
+                    valid_df[label] = (preds[:, i] >= t).astype(int)
+
+                st.success(f"✅ Prediction complete. Skipped {skipped_count} empty or invalid rows.")
+                st.dataframe(valid_df[["comment_text"] + [label + "_score" for label in labels] + labels])
     except Exception as e:
         st.error(f"Error processing file: {e}")

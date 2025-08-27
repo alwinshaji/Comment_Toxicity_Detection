@@ -4,4 +4,4 @@ numpy
 gdown
 nltk
 contractions
-
+matplotlib

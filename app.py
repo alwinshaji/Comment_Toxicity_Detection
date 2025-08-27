@@ -6,6 +6,8 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 import re
+import os
+import requests
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -13,7 +15,17 @@ import seaborn as sns
 MAX_LEN = 300
 VOCAB_SIZE = 20000
 LABELS = ['toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate']
-MODEL_PATH = 'cnn_bigru_model.h5'
+MODEL_PATH = "cnn_bigru_model.h5"
+MODEL_URL = "https://raw.githubusercontent.com/yourusername/yourrepo/main/cnn_bigru_model.h5"  # Replace with actual URL
+
+# === Download Model if Missing ===
+def download_model():
+    if not os.path.exists(MODEL_PATH):
+        with open(MODEL_PATH, "wb") as f:
+            response = requests.get(MODEL_URL)
+            f.write(response.content)
+
+download_model()
 
 # === Load Model ===
 @st.cache_resource
@@ -87,7 +99,7 @@ with st.sidebar:
 - Identity Hate: 0.49  
 """)
     st.markdown("---")
-    st.markdown("📁 [Upload CSV] or try a sample comment below.")
+    st.markdown("📁 Upload CSV or try a sample comment below.")
 
 # === Real-Time Prediction ===
 with st.expander("🔍 Real-Time Comment Prediction", expanded=True):

@@ -64,14 +64,17 @@ def load_assets():
 tokenizer, model = load_assets()
 
 # === Prediction ===
-def predict_comment(text, model, tokenizer, threshold=0.5):
+def predict_comment(text, model, tokenizer, toxic_threshold=0.6, default_threshold=0.5):
     cleaned = preprocess_text(text)
     seq = tokenizer.texts_to_sequences([cleaned])
     padded = pad_sequences(seq, maxlen=200)
     pred = model.predict(padded)[0]
     labels = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
     scores = dict(zip(labels, pred))
-    binary = {label: int(score >= threshold) for label, score in scores.items()}
+    binary = {}
+    for label in labels:
+        t = toxic_threshold if label == "toxic" else default_threshold
+        binary[label] = int(scores[label] >= t)
     return scores, binary
 
 # === UI ===
@@ -98,15 +101,16 @@ with st.expander("📘 About the Model"):
 # === Input Guidance ===
 st.markdown("💡 *Tip: For best results, enter short, informal comments (e.g., social media replies, forum posts). Avoid long paragraphs or technical content.*")
 
-# === Threshold Slider ===
-threshold = st.slider("⚙️ Set toxicity threshold", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+# === Threshold Sliders ===
+threshold = st.slider("⚙️ General threshold for all labels", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+toxic_threshold = st.slider("🧪 Adjust 'toxic' sensitivity", min_value=0.0, max_value=1.0, value=0.6, step=0.05)
 
 # === Single Comment ===
 user_input = st.text_area("🔍 Enter a comment", placeholder="Type something like 'You're such a loser!' or 'I love this!'")
 
 if st.button("Analyze Text"):
     if user_input.strip():
-        scores, binary = predict_comment(user_input, model, tokenizer, threshold)
+        scores, binary = predict_comment(user_input, model, tokenizer, toxic_threshold, threshold)
         st.subheader("📊 Toxicity Breakdown")
 
         labels = list(scores.keys())
@@ -144,8 +148,9 @@ if uploaded_file:
             preds = model.predict(padded)
             labels = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
             for i, label in enumerate(labels):
+                t = toxic_threshold if label == "toxic" else threshold
                 df[label + "_score"] = preds[:, i]
-                df[label] = (preds[:, i] >= threshold).astype(int)
+                df[label] = (preds[:, i] >= t).astype(int)
             st.dataframe(df[["comment_text"] + [label + "_score" for label in labels] + labels])
     except Exception as e:
         st.error(f"Error processing file: {e}")

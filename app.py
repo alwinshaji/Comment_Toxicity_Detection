@@ -113,17 +113,13 @@ if st.button("Analyze Text"):
         scores, binary = predict_comment(user_input, model, tokenizer, toxic_threshold, threshold)
         st.subheader("📊 Toxicity Breakdown")
 
-        labels = list(scores.keys())
-        values = list(scores.values())
-
         fig, ax = plt.subplots()
-        bars = ax.barh(labels, values, color="salmon")
+        ax.barh(list(scores.keys()), list(scores.values()), color="salmon")
         ax.set_xlim(0, 1)
         ax.set_xlabel("Toxicity Score")
         ax.set_title("Toxicity Prediction")
-        for bar in bars:
-            width = bar.get_width()
-            ax.text(width + 0.02, bar.get_y() + bar.get_height()/2, f"{width:.2f}", va='center')
+        for i, (label, score) in enumerate(scores.items()):
+            ax.text(score + 0.02, i, f"{score:.2f}", va='center')
         st.pyplot(fig)
 
         st.markdown("### ✅ Binary Classification")

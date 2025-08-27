@@ -64,13 +64,15 @@ def load_assets():
 tokenizer, model = load_assets()
 
 # === Prediction ===
-def predict_comment(text, model, tokenizer):
+def predict_comment(text, model, tokenizer, threshold=0.5):
     cleaned = preprocess_text(text)
     seq = tokenizer.texts_to_sequences([cleaned])
     padded = pad_sequences(seq, maxlen=200)
     pred = model.predict(padded)[0]
     labels = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
-    return dict(zip(labels, pred))
+    scores = dict(zip(labels, pred))
+    binary = {label: int(score >= threshold) for label, score in scores.items()}
+    return scores, binary
 
 # === UI ===
 st.set_page_config(page_title="Toxicity Detector", layout="centered")
@@ -96,19 +98,22 @@ with st.expander("📘 About the Model"):
 # === Input Guidance ===
 st.markdown("💡 *Tip: For best results, enter short, informal comments (e.g., social media replies, forum posts). Avoid long paragraphs or technical content.*")
 
+# === Threshold Slider ===
+threshold = st.slider("⚙️ Set toxicity threshold", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+
 # === Single Comment ===
 user_input = st.text_area("🔍 Enter a comment", placeholder="Type something like 'You're such a loser!' or 'I love this!'")
 
 if st.button("Analyze Text"):
     if user_input.strip():
-        result = predict_comment(user_input, model, tokenizer)
+        scores, binary = predict_comment(user_input, model, tokenizer, threshold)
         st.subheader("📊 Toxicity Breakdown")
 
-        labels = list(result.keys())
-        scores = list(result.values())
+        labels = list(scores.keys())
+        values = list(scores.values())
 
         fig, ax = plt.subplots()
-        bars = ax.barh(labels, scores, color="salmon")
+        bars = ax.barh(labels, values, color="salmon")
         ax.set_xlim(0, 1)
         ax.set_xlabel("Toxicity Score")
         ax.set_title("Toxicity Prediction")
@@ -116,6 +121,9 @@ if st.button("Analyze Text"):
             width = bar.get_width()
             ax.text(width + 0.02, bar.get_y() + bar.get_height()/2, f"{width:.2f}", va='center')
         st.pyplot(fig)
+
+        st.markdown("### ✅ Binary Classification")
+        st.write(binary)
     else:
         st.warning("Please enter a comment to analyze.")
 
@@ -136,7 +144,8 @@ if uploaded_file:
             preds = model.predict(padded)
             labels = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
             for i, label in enumerate(labels):
-                df[label] = preds[:, i]
-            st.dataframe(df[["comment_text"] + labels])
+                df[label + "_score"] = preds[:, i]
+                df[label] = (preds[:, i] >= threshold).astype(int)
+            st.dataframe(df[["comment_text"] + [label + "_score" for label in labels] + labels])
     except Exception as e:
         st.error(f"Error processing file: {e}")

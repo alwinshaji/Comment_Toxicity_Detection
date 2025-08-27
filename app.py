@@ -16,7 +16,7 @@ MAX_LEN = 300
 VOCAB_SIZE = 20000
 LABELS = ['toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate']
 MODEL_PATH = "cnn_bigru_model.h5"
-MODEL_URL = "https://raw.githubusercontent.com/yourusername/yourrepo/main/cnn_bigru_model.h5"  # Replace with actual URL
+MODEL_URL = "https://raw.githubusercontent.com/alwinshaji/Comment_Toxicity_Detection/main/cnn_bigru_model.h5"  # Update if needed
 
 # === Download Model if Missing ===
 def download_model():
@@ -56,7 +56,7 @@ def clean_text(text):
 def preprocess(texts):
     cleaned = [clean_text(t) for t in texts]
     sequences = tokenizer.texts_to_sequences(cleaned)
-    if not sequences or len(sequences[0]) == 0:
+    if not sequences or all(len(seq) == 0 for seq in sequences):
         return None
     padded = pad_sequences(sequences, maxlen=MAX_LEN)
     return padded
@@ -66,7 +66,6 @@ def predict_toxicity(texts):
     try:
         X = preprocess(texts)
         if X is None or X.shape[1] != MAX_LEN:
-            st.error("Invalid input shape or empty tokenized sequence.")
             return pd.DataFrame(columns=LABELS)
         preds = model.predict(X)
         return pd.DataFrame(preds, columns=LABELS)
@@ -103,12 +102,22 @@ with st.sidebar:
 
 # === Real-Time Prediction ===
 with st.expander("🔍 Real-Time Comment Prediction", expanded=True):
+    st.markdown("""
+Type a comment below to check for toxicity.  
+Examples:
+- “You are amazing!” (non-toxic)  
+- “Go kill yourself.” (highly toxic)  
+- “I hate everything about this.” (moderately toxic)
+""")
     user_input = st.text_area("Enter a comment to analyze:")
     if st.button("Run Prediction"):
         if user_input.strip():
             result = predict_toxicity([user_input])
-            st.success("Prediction complete.")
-            st.dataframe(result.style.highlight_max(axis=1))
+            if result.empty:
+                st.warning("Could not process the input. Try a different comment.")
+            else:
+                st.success("Prediction complete.")
+                st.dataframe(result.style.highlight_max(axis=1))
         else:
             st.warning("Please enter a comment.")
 
@@ -135,15 +144,21 @@ with st.expander("🧪 Sample Test Cases"):
         "You're a genius!"
     ]
     sample_preds = predict_toxicity(sample_comments)
-    sample_df = pd.DataFrame({'Comment': sample_comments})
-    sample_result = pd.concat([sample_df, sample_preds], axis=1)
-    st.dataframe(sample_result)
+    if not sample_preds.empty:
+        sample_df = pd.DataFrame({'Comment': sample_comments})
+        sample_result = pd.concat([sample_df, sample_preds], axis=1)
+        st.dataframe(sample_result)
+    else:
+        st.warning("Sample predictions failed to generate.")
 
 # === Visualization ===
 with st.expander("📈 Toxic Label Distribution (Sample)"):
-    label_counts = sample_preds.apply(lambda x: x > 0.5).sum()
-    fig, ax = plt.subplots()
-    sns.barplot(x=label_counts.index, y=label_counts.values, palette="viridis", ax=ax)
-    ax.set_ylabel("Count")
-    ax.set_title("Toxic Label Distribution")
-    st.pyplot(fig)
+    if not sample_preds.empty:
+        label_counts = (sample_preds > 0.5).sum()
+        fig, ax = plt.subplots()
+        sns.barplot(x=label_counts.index, y=label_counts.values, palette="viridis", ax=ax)
+        ax.set_ylabel("Count")
+        ax.set_title("Toxic Label Distribution")
+        st.pyplot(fig)
+    else:
+        st.warning("No data available for chart.")

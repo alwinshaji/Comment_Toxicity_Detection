@@ -8,6 +8,7 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 import nltk
+import matplotlib.pyplot as plt
 
 # === NLTK Setup ===
 for resource in ["stopwords", "wordnet"]:
@@ -69,23 +70,52 @@ def predict_comment(text, model, tokenizer):
     padded = pad_sequences(seq, maxlen=200)
     pred = model.predict(padded)[0]
     labels = ["toxic", "severe_toxic", "obscene", "threat", "insult", "identity_hate"]
-    result = {label: float(score) for label, score in zip(labels, pred)}
-    return result
+    return dict(zip(labels, pred))
 
 # === UI ===
 st.set_page_config(page_title="Toxicity Detector", layout="centered")
 st.title("🧪 Multi-label Toxicity Classifier")
-st.markdown("Enter a comment or upload a CSV to detect multiple types of toxicity.")
+
+# === About the Model ===
+with st.expander("📘 About the Model"):
+    st.markdown("""
+    This classifier was built using deep learning techniques including **CNNs**, **Bidirectional GRUs**, and **LSTMs**.
+    After extensive experimentation, the final model uses an optimized LSTM architecture trained on the Jigsaw dataset.
+
+    It predicts six toxicity categories:
+    - **Toxic**
+    - **Severe Toxic**
+    - **Obscene**
+    - **Threat**
+    - **Insult**
+    - **Identity Hate**
+
+    The model is designed to handle short, informal comments — like those found on social media or forums.
+    """)
+
+# === Input Guidance ===
+st.markdown("💡 *Tip: For best results, enter short, informal comments (e.g., social media replies, forum posts). Avoid long paragraphs or technical content.*")
 
 # === Single Comment ===
-user_input = st.text_area("🔍 Enter a comment", placeholder="Type something...")
+user_input = st.text_area("🔍 Enter a comment", placeholder="Type something like 'You're such a loser!' or 'I love this!'")
 
 if st.button("Analyze Text"):
     if user_input.strip():
         result = predict_comment(user_input, model, tokenizer)
-        st.subheader("Prediction Scores:")
-        for label, score in result.items():
-            st.write(f"**{label}**: {score:.2f}")
+        st.subheader("📊 Toxicity Breakdown")
+
+        labels = list(result.keys())
+        scores = list(result.values())
+
+        fig, ax = plt.subplots()
+        bars = ax.barh(labels, scores, color="salmon")
+        ax.set_xlim(0, 1)
+        ax.set_xlabel("Toxicity Score")
+        ax.set_title("Toxicity Prediction")
+        for bar in bars:
+            width = bar.get_width()
+            ax.text(width + 0.02, bar.get_y() + bar.get_height()/2, f"{width:.2f}", va='center')
+        st.pyplot(fig)
     else:
         st.warning("Please enter a comment to analyze.")
 
